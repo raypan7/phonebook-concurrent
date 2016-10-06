@@ -9,9 +9,17 @@
 #include <pthread.h>
 #include <sys/mman.h>
 
+#include "file.c"
+#include "debug.h"
+#include <fcntl.h>
+#include "threadpool.h"
+
 #include IMPL
 
 #define DICT_FILE "./dictionary/words.txt"
+#define ALIGN_FILE "align.txt"
+
+pthread_mutex_t lock;
 
 static double diff_in_second(struct timespec t1, struct timespec t2)
 {
@@ -46,11 +54,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 #else
-
-#include "file.c"
-#include "debug.h"
-#include <fcntl.h>
-#define ALIGN_FILE "align.txt"
     file_align(DICT_FILE, ALIGN_FILE, MAX_LAST_NAME_SIZE);
     int fd = open(ALIGN_FILE, O_RDONLY | O_NONBLOCK);
     off_t fs = fsize(ALIGN_FILE);
@@ -68,10 +71,6 @@ int main(int argc, char *argv[])
 #endif
 
 #if defined(OPT)
-
-#ifndef THREAD_NUM
-#define THREAD_NUM 4
-#endif
     clock_gettime(CLOCK_REALTIME, &start);
 
     char *map = mmap(NULL, fs, PROT_READ, MAP_SHARED, fd, 0);
@@ -85,13 +84,25 @@ int main(int argc, char *argv[])
 
     pthread_setconcurrency(THREAD_NUM + 1);
 
+
     pthread_t *tid = (pthread_t *) malloc(sizeof(pthread_t) * THREAD_NUM);
     append_a **app = (append_a **) malloc(sizeof(append_a *) * THREAD_NUM);
-    for (int i = 0; i < THREAD_NUM; i++)
-        app[i] = new_append_a(map + MAX_LAST_NAME_SIZE * i, map + fs, i,
-                              THREAD_NUM, entry_pool + i);
+    
+    threadpool_t *pool = threadpool_create(THREAD_NUM, POOL_SIZE, 0);
+    //pthread_mutex_init(&lock, NULL);
+    
 
     clock_gettime(CLOCK_REALTIME, &mid);
+    for (int i = 0; i < THREAD_NUM; i++){
+        //pthread_mutex_lock(&lock);
+        app[i] = new_append_a(map + MAX_LAST_NAME_SIZE * i, map + fs, i,
+                              THREAD_NUM, entry_pool + i);
+        threadpool_add(pool, &append, app[i], 0);
+        //pthread_mutex_unlock(&lock);
+    }
+     
+    threadpool_destroy(pool, 1);
+
     for (int i = 0; i < THREAD_NUM; i++)
         pthread_create( &tid[i], NULL, (void *) &append, (void *) app[i]);
 

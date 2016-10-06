@@ -1,0 +1,7 @@
+Thread1 0.005266
+Thread2 0.005651 
+Thread4 0.007042
+Thread8 0.008651
+Thread16 0.009719
+Thread32 0.009595
+Thread64 0.011166
